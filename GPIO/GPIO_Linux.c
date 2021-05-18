@@ -50,14 +50,6 @@
 #define GPIO30 (1 << 30)
 #define GPIO31 (1 << 31)
 
-//some macros
-#define ENABLE 	 1	
-#define DISABLE  0
-#define SET	ENABLE
-#define RESET	DISABLE
-#define GPIO_PIN_SET SET
-#define GPIO_PIN_RESET RESET
-
 #define GPIO ((GPIO_RegDef_t *)GPIO_START);
 
 typedef struct{
@@ -68,31 +60,15 @@ typedef struct{
 GPIO_RegDef_t *pGPIO = GPIO;
 
 
-struct shakti_gpio {
-	struct gpio gp;
-	struct clk *pclk;
+/*struct shakti_gpio {
+	struct GPIO_RegDef_t gp;
 	void __iomem *regs;
-	u32 bypass_orig;
-};
+};*/
 
-static int shakti_gpio_remove(struct platform_device *pdev)
-{
-	struct shakti_gpio *sgpio = platform_get_drvdata(pdev);
 
-	iowrite32(sgpio->bypass_orig, cgpio->regs + CDNS_GPIO_BYPASS_MODE);
-	clk_disable_unprepare(sgpio->pclk);
-
-	return 0;
-}
-
-static const struct of_device_id cdns_of_ids[] = {
-	{ .compatible = "cdns,gpio-r1p02" },
-	{ /* sentinel */ },
-};
-
-static struct platform_driver cdns_gpio_driver = { //TODO
+static struct platform_driver cdns_gpio_driver = {
 	.driver = {
-		.name = "shakti-gpio",
+		.name = "cdns-gpio",
 		.of_match_table = cdns_of_ids,
 	},
 	.probe = cdns_gpio_probe,
