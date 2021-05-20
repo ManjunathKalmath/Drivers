@@ -6,6 +6,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <linux/cdev.h>
+#include <linux/uaccess.h>
+#include <linux/gpio.h>
 
 
 /*!General Purpose Input / Output */
@@ -59,39 +64,10 @@ typedef struct{
 
 GPIO_RegDef_t *pGPIO = GPIO;
 
-
-/*struct shakti_gpio {
-	struct GPIO_RegDef_t gp;
-	void __iomem *regs;
-};*/
-
-
-static struct platform_driver cdns_gpio_driver = {
-	.driver = {
-		.name = "cdns-gpio",
-		.of_match_table = cdns_of_ids,
-	},
-	.probe = cdns_gpio_probe,
-	.remove = cdns_gpio_remove,
-};
-module_platform_driver(cdns_gpio_driver);
-
+/* Meta Information */
 MODULE_AUTHOR("SandLogic Technologies Pvt Ltd");
 MODULE_DESCRIPTION("ShaktiVajra GPIO driver");
 MODULE_LICENSE("GPL");
-
-
-#include <linux/module.h>
-#include <linux/init.h>
-#include <linux/fs.h>
-#include <linux/cdev.h>
-#include <linux/uaccess.h>
-#include <linux/gpio.h>
-
-/* Meta Information */
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Johannes 4 GNU/Linux");
-MODULE_DESCRIPTION("A simple gpio driver for setting a LED and reading a button");
 
 /* Variables for device and device class */
 static dev_t my_device_nr;
@@ -195,13 +171,13 @@ static int __init ModuleInit(void) {
 
 	/* Create device class */
 	if((my_class = class_create(THIS_MODULE, DRIVER_CLASS)) == NULL) {
-		printk("Device class can not e created!\n");
+		printk("Device class cannot be created!\n");
 		goto ClassError;
 	}
 
 	/* create device file */
 	if(device_create(my_class, NULL, my_device_nr, NULL, DRIVER_NAME) == NULL) {
-		printk("Can not create device file!\n");
+		printk("Cannot create device file!\n");
 		goto FileError;
 	}
 
