@@ -5,6 +5,8 @@
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/io.h>
+#include <linux/ioport.h>
+#include <linux/completion.h>
 #include <linux/log2.h>
 
 #define SHAKTI_SPI_NAME "shakti_spi"
@@ -100,7 +102,7 @@ static void shakti_spi_init(struct shakti_spi *spi)
 	//If some of the registers requires value to be stored at starting such as 1 into Reg1 and 0 to Reg2 and so on
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
  static void shakti_spi_prep_device(struct shakti_spi *spi, struct spi_device *device)
 {
 	u32 cr;
@@ -110,21 +112,21 @@ static void shakti_spi_init(struct shakti_spi *spi)
 		spi->cs_inactive &= ~BIT(device->chip_select);
 	else
 		spi->cs_inactive |= BIT(device->chip_select);
-	sifive_spi_write(spi, XSPI_CSDR_OFFSET, spi->cs_inactive);
+	shakti_spi_write(spi, XSPI_CSDR_OFFSET, spi->cs_inactive);
 
 	/* Select the correct device */
-	sifive_spi_write(spi, XSPI_CSIDR_OFFSET, device->chip_select);
+	shakti_spi_write(spi, XSPI_CSIDR_OFFSET, device->chip_select);
 
 	/* Switch clock mode bits */
-	cr = sifive_spi_read(spi, XSPI_SCMR_OFFSET) & ~XSPI_SCM_MODE_MASK;
+	cr = shakti_spi_read(spi, XSPI_SCMR_OFFSET) & ~XSPI_SCM_MODE_MASK;
 	if (device->mode & SPI_CPHA)
 		cr |= XSPI_SCM_CPHA;
 	if (device->mode & SPI_CPOL)
 		cr |= XSPI_SCM_CPOL;
-	sifive_spi_write(spi, XSPI_SCMR_OFFSET, cr);
+	shakti_spi_write(spi, XSPI_SCMR_OFFSET, cr);
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *device, struct spi_transfer *t)
 {
 	u32 hz, scale, cr;
@@ -133,10 +135,10 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 	/* Calculate and program the clock rate */
 	hz = t->speed_hz ? t->speed_hz : device->max_speed_hz;
 	scale = (DIV_ROUND_UP(clk_get_rate(spi->clk) >> 1, hz) - 1) & XSPI_SCD_SCALE_MASK;
-	sifive_spi_write(spi, XSPI_SCDR_OFFSET, scale);
+	shakti_spi_write(spi, XSPI_SCDR_OFFSET, scale);
 
 	/* Modify the SPI protocol mode */
-	cr = sifive_spi_read(spi, XSPI_FFR_OFFSET);
+	cr = shakti_spi_read(spi, XSPI_FFR_OFFSET);
 
 	/* LSB first? */
 	cr &= ~XSPI_FF_LSB_FIRST;
@@ -157,7 +159,7 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 	if (!t->rx_buf)
 		cr |= XSPI_FF_TX_DIR;
 
-	sifive_spi_write(spi, XSPI_FFR_OFFSET, cr);
+	shakti_spi_write(spi, XSPI_FFR_OFFSET, cr);
 
 	/* We will want to poll if the time we need to wait is less than the context switching time.
 	 * Let's call that threshold 5us. The operation will take:
@@ -167,36 +169,36 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 	return 1600000 * spi->buffer_size <= hz * mode;
 }
 
-//Need to update this file
+//Need to update this file --- UPDATED
 static void shakti_spi_tx(struct shakti_spi *spi, const u8* tx_ptr)
 {
-	BUG_ON((sifive_spi_read(spi, XSPI_TXDR_OFFSET) & XSPI_TXD_FIFO_FULL) != 0);
-	sifive_spi_write(spi, XSPI_TXDR_OFFSET, *tx_ptr & XSPI_DATA_MASK);
+	BUG_ON((shakti_spi_read(spi, XSPI_TXDR_OFFSET) & XSPI_TXD_FIFO_FULL) != 0);
+	shakti_spi_write(spi, XSPI_TXDR_OFFSET, *tx_ptr & XSPI_DATA_MASK);
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static void shakti_spi_rx(struct shakti_spi *spi, u8* rx_ptr)
 {
-        u32 data = sifive_spi_read(spi, XSPI_RXDR_OFFSET);
+        u32 data = shakti_spi_read(spi, XSPI_RXDR_OFFSET);
         BUG_ON((data & XSPI_RXD_FIFO_EMPTY) != 0);
         *rx_ptr = data & XSPI_DATA_MASK;
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static void shakti_spi_wait(struct shakti_spi *spi, int bit, int poll)
 {
 	if (poll) {
 		u32 cr;
-		do cr = sifive_spi_read(spi, XSPI_IPR_OFFSET);
+		do cr = shakti_spi_read(spi, XSPI_IPR_OFFSET);		//TODO. understand
 		while (!(cr & bit));
 	} else {
 		reinit_completion(&spi->done);
-		sifive_spi_write(spi, XSPI_IER_OFFSET, bit);
+		shakti_spi_write(spi, XSPI_IER_OFFSET, bit);
 		wait_for_completion(&spi->done);
 	}
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, int poll)
 {
 	int remaining_words = t->len;
@@ -209,39 +211,39 @@ static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, i
 
 		/* Enqueue n_words for transmission */
 		for (tx_words = 0; tx_words < n_words; ++tx_words)
-			sifive_spi_tx(spi, tx_ptr++);
+			shakti_spi_tx(spi, tx_ptr++);
 
 		if (rx_ptr) {
 			/* Wait for transmission + reception to complete */
-			sifive_spi_write(spi, XSPI_RXWMR_OFFSET, n_words-1);
-			sifive_spi_wait(spi, XSPI_RXWM_INTR, poll);
+			shakti_spi_write(spi, XSPI_RXWMR_OFFSET, n_words-1);	//TODO. understand
+			shakti_spi_wait(spi, XSPI_RXWM_INTR, poll);		//TODO. understand
 
 			/* Read out all the data from the RX FIFO */
 			for (rx_words = 0; rx_words < n_words; ++rx_words)
-				sifive_spi_rx(spi, rx_ptr++);
+				shakti_spi_rx(spi, rx_ptr++);
 		} else {
 			/* Wait for transmission to complete */
-			sifive_spi_wait(spi, XSPI_TXWM_INTR, poll);
+			shakti_spi_wait(spi, XSPI_TXWM_INTR, poll);
 		}
 
 		remaining_words -= n_words;
 	}
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static int shakti_spi_transfer_one(struct spi_master *master, struct spi_device *device, struct spi_transfer *t)
 {
-	struct sifive_spi *spi = spi_master_get_devdata(master);
+	struct shakti_spi *spi = spi_master_get_devdata(master);
 	int poll;
 
-	sifive_spi_prep_device(spi, device);
-	poll = sifive_spi_prep_transfer(spi, device, t);
-	sifive_spi_execute(spi, t, poll);
+	shakti_spi_prep_device(spi, device);
+	poll = shakti_spi_prep_transfer(spi, device, t);
+	shakti_spi_execute(spi, t, poll);
 
 	return 0;
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static void shakti_spi_set_cs(struct spi_device *device, bool is_high)
 {
 	struct shakti_spi *spi = spi_master_get_devdata(device->master);
@@ -250,10 +252,10 @@ static void shakti_spi_set_cs(struct spi_device *device, bool is_high)
 	if (device->mode & SPI_CS_HIGH)
 		is_high = !is_high;
 
-	sifive_spi_write(spi, XSPI_CSMR_OFFSET, is_high ? XSPI_CSM_MODE_AUTO : XSPI_CSM_MODE_HOLD);
+	shakti_spi_write(spi, XSPI_CSMR_OFFSET, is_high ? XSPI_CSM_MODE_AUTO : XSPI_CSM_MODE_HOLD);	//TODO. understand
 }
 
-//Need to update the file
+//Need to update the file  --- UPDATED
 static int shakti_spi_probe(struct platform_device *pdev)
 {
 	struct shakti_spi *spi;
@@ -262,7 +264,7 @@ static int shakti_spi_probe(struct platform_device *pdev)
 	u32 cs_bits, buffer_size, bits_per_word;
 	struct spi_master *master;
 
-	master = spi_alloc_master(&pdev->dev, sizeof(struct sifive_spi));
+	master = spi_alloc_master(&pdev->dev, sizeof(struct shakti_spi));
 	if (!master) {
 		dev_err(&pdev->dev, "out of memory\n");
 		return -ENOMEM;
@@ -280,7 +282,7 @@ static int shakti_spi_probe(struct platform_device *pdev)
 		goto put_master;
 	}
 
-	spi->clk = devm_clk_get(&pdev->dev, NULL);
+	/*spi->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(spi->clk)) {
 		dev_err(&pdev->dev, "Unable to find bus clock\n");
 		ret = PTR_ERR(spi->clk);
@@ -292,31 +294,31 @@ static int shakti_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Unable to find interrupt\n");
 		ret = spi->irq;
 		goto put_master;
-	}
+	}*/
 
-	/* Optional parameters */
-	ret = of_property_read_u32(pdev->dev.of_node, "sifive,buffer-size", &buffer_size);
+	/* Optional parameters */ ---- TODO Understand
+	ret = of_property_read_u32(pdev->dev.of_node, "shakti,buffer-size", &buffer_size);
 	if (ret < 0)
 		spi->buffer_size = SIFIVE_SPI_DEFAULT_DEPTH;
 	else
 		spi->buffer_size = buffer_size;
 
-	ret = of_property_read_u32(pdev->dev.of_node, "sifive,bits-per-word", &bits_per_word);
+	ret = of_property_read_u32(pdev->dev.of_node, "shakti,bits-per-word", &bits_per_word);
 	if (ret < 0)
 		bits_per_word = SIFIVE_SPI_DEFAULT_BITS;
 
 	/* Spin up the bus clock before hitting registers */
-	ret = clk_prepare_enable(spi->clk);
+	/*ret = clk_prepare_enable(spi->clk);
 	if (ret) {
 		dev_err(&pdev->dev, "Unable to enable bus clock\n");
 		goto put_master;
-	}
+	}*/
 
 	/* probe the number of CS lines */
-	spi->cs_inactive = sifive_spi_read(spi, XSPI_CSDR_OFFSET);
-	sifive_spi_write(spi, XSPI_CSDR_OFFSET, 0xffffffffU);
-	cs_bits = sifive_spi_read(spi, XSPI_CSDR_OFFSET);
-	sifive_spi_write(spi, XSPI_CSDR_OFFSET, spi->cs_inactive);
+	spi->cs_inactive = shakti_spi_read(spi, XSPI_CSDR_OFFSET);	//TODO. understand
+	shakti_spi_write(spi, XSPI_CSDR_OFFSET, 0xffffffffU);		//TODO. understand
+	cs_bits = shakti_spi_read(spi, XSPI_CSDR_OFFSET);		//TODO. understand
+	shakti_spi_write(spi, XSPI_CSDR_OFFSET, spi->cs_inactive);	//TODO. understand
 	if (!cs_bits) {
 		dev_err(&pdev->dev, "Could not auto probe CS lines\n");
 		ret = -EINVAL;
@@ -338,24 +340,24 @@ static int shakti_spi_probe(struct platform_device *pdev)
 	master->dev.of_node = pdev->dev.of_node;
 	master->bits_per_word_mask = SPI_BPW_MASK(bits_per_word);
 	master->num_chipselect = num_cs;
-	master->transfer_one = sifive_spi_transfer_one;
-	master->set_cs = sifive_spi_set_cs;
+	master->transfer_one = shakti_spi_transfer_one;
+	master->set_cs = shakti_spi_set_cs;
 
 	/* If mmc_spi sees a dma_mask, it starts using dma mapped buffers.
 	 * Probably it should rely on the SPI core auto mapping instead.
 	 */
-	pdev->dev.dma_mask = 0;
+	//pdev->dev.dma_mask = 0;
 
 	/* Configure the SPI master hardware */
-	sifive_spi_init(spi);
+	shakti_spi_init(spi);
 
 	/* Register for SPI Interrupt */
-	ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
+	/*ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
 				dev_name(&pdev->dev), spi);
 	if (ret) {
 		dev_err(&pdev->dev, "Unable to bind to interrupt\n");
 		goto put_master;
-	}
+	}*/
 
 	dev_info(&pdev->dev, "mapped; irq=%d, cs=%d\n",
 		spi->irq, master->num_chipselect);
@@ -374,7 +376,7 @@ put_master:
 	return ret;
 }
 
-//Need to update the file
+//Need to update the file --- UPDATED
 static int shakti_spi_remove(struct platform_device *pdev)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
@@ -387,22 +389,22 @@ static int shakti_spi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-//Need to update the file
-static const struct of_device_id sifive_spi_of_match[] = {
-	{ .compatible = "sifive,spi0", },
+//Need to update the file --- UPDATED
+static const struct of_device_id shakti_spi_of_match[] = {
+	{ .compatible = "shakti,spi0", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, sifive_spi_of_match);
 
 static struct platform_driver sifive_spi_driver = {
-	.probe = sifive_spi_probe,
-	.remove = sifive_spi_remove,
+	.probe = shakti_spi_probe,
+	.remove = shakti_spi_remove,
 	.driver = {
-		.name = SIFIVE_SPI_NAME,
-		.of_match_table = sifive_spi_of_match,
+		.name = SHAKTI_SPI_NAME,
+		.of_match_table = shakti_spi_of_match,
 	},
 };
-module_platform_driver(sifive_spi_driver);
+module_platform_driver(shakti_spi_driver);
 
 MODULE_AUTHOR("SandLogic Technologies Pvt Ltd");
 MODULE_DESCRIPTION("ShaktiVajra GPIO driver");
