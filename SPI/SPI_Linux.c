@@ -1,7 +1,7 @@
 #include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/of.h>
+#include <linux/of.h>	//TODO
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/io.h>
@@ -184,7 +184,7 @@ static void shakti_spi_rx(struct shakti_spi *spi, u8* rx_ptr)
         *rx_ptr = data & XSPI_DATA_MASK;
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED --- Interrupt based check
 static void shakti_spi_wait(struct shakti_spi *spi, int bit, int poll)
 {
 	if (poll) {
