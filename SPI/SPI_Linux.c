@@ -1,7 +1,7 @@
 #include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/of.h>	//TODO
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
 #include <linux/io.h>
@@ -25,11 +25,11 @@
 #define SPI_TXCRCR   0x00020028
 
 // defining SPI_CR1 register
-#define SPI_CPHA	      (1 << 0)
-#define SPI_CPOL	      (1 << 1)
+#define SPI_CPHA	      (1 << 0)	//(0 << 0)
+#define SPI_CPOL	      (1 << 1)  //(0 << 1)
 #define SPI_MSTR	      (1 << 2)
-#define SPI_BR(x)	      (x << 3)
-#define SPI_SPE		      (1 << 6)
+#define SPI_BR(x)	      (x << 3)	// ((0 << 3) | (1 << 4) | (0 << 5)) /* fclk/8 will be done here by setting these bits */
+#define SPI_SPE		      (1 << 6)  
 #define SPI_LSBFIRST	      (1 << 7)
 #define SPI_SSI		      (1 << 8)
 #define SPI_SSM		      (1 << 9)
@@ -39,8 +39,8 @@
 #define SPI_CRCEN	      (1 << 13)
 #define SPI_BIDIOE	      (1 << 14)
 #define SPI_BIDIMODE	      (1 << 15)
-#define SPI_TOTAL_BITS_TX(x)  (x << 16)
-#define SPI_TOTAL_BITS_RX(x)  (x << 24)
+#define SPI_TOTAL_BITS_TX(x)  (x << 16)	/* It is 8 bit in length so just sending 10 values so ((0 << 16) | (1 << 17) | (0 << 18) | (1 << 19) | (0 << 20) | (0 << 21) | (0 << 22) | (0 << 23))*/
+#define SPI_TOTAL_BITS_RX(x)  (x << 24) /* It is 8 bit in length so need to receive 10 values so ((0 << 24) | (1 << 25) | (0 << 26) | (1 << 27) | (0 << 28) | (0 << 29) | (0 << 30) | (0 << 31))*/
 
 // defining SPI_CR2 register
 #define SPI_RX_IMM_START   (1 << 16)
@@ -48,7 +48,7 @@
 #define SPI_LDMA_TX	   (1 << 14)
 #define SPI_LDMA_RX	   (1 << 13)
 #define SPI_FRXTH	   (1 << 12)
-#define SPI_DS(x)	   (x << 8)
+#define SPI_DS(x)	   (x << 8) /* It is 3 bit in length and reserved so ((1 << 8) |(1 << 9) |(1 << 10) | (1 << 11)) */
 #define SPI_TXEIE	   (1 << 7)
 #define SPI_RXNEIE	   (1 << 6)
 #define SPI_ERRIE	   (1 << 5)
@@ -84,7 +84,8 @@ int* spi_txcrcr = (int*) SPI_TXCRCR;
 
 struct shakti_spi {
 	void __iomem      *regs;        /* virt. address of control registers */
-	int 		buffer_size;	/* buffer size in words */
+	struct clk	  *clk;		/* bus clock */
+	int 		  buffer_size;	/* buffer size in words */
 	u32               cs_inactive;  /* level of the CS pins when inactive */
 };
 
@@ -103,7 +104,7 @@ static void shakti_spi_init(struct shakti_spi *spi)
 	//If some of the registers requires value to be stored at starting such as 1 into Reg1 and 0 to Reg2 and so on
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED but some pending with registers
  static void shakti_spi_prep_device(struct shakti_spi *spi, struct spi_device *device)
 {
 	u32 cr;
@@ -113,21 +114,21 @@ static void shakti_spi_init(struct shakti_spi *spi)
 		spi->cs_inactive &= ~BIT(device->chip_select);
 	else
 		spi->cs_inactive |= BIT(device->chip_select);
-	shakti_spi_write(spi, XSPI_CSDR_OFFSET, spi->cs_inactive);
+	shakti_spi_write(spi, /*need to CS offset address*/, spi->cs_inactive);
 
 	/* Select the correct device */
-	shakti_spi_write(spi, XSPI_CSIDR_OFFSET, device->chip_select);
+	shakti_spi_write(spi, /*CSDIR*/, device->chip_select);
 
 	/* Switch clock mode bits */
-	cr = shakti_spi_read(spi, XSPI_SCMR_OFFSET) & ~XSPI_SCM_MODE_MASK;
+	cr = shakti_spi_read(spi, XSPI_SCMR_OFFSET) & ~XSPI_SCM_MODE_MASK; /*There are multiple are included so how to take separate CPOL and CPHA*/
 	if (device->mode & SPI_CPHA)
-		cr |= XSPI_SCM_CPHA;
+		cr |= SPI_CPHA;
 	if (device->mode & SPI_CPOL)
-		cr |= XSPI_SCM_CPOL;
+		cr |= SPI_CPOL;
 	shakti_spi_write(spi, XSPI_SCMR_OFFSET, cr);
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED but some pending with registers
 static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *device, struct spi_transfer *t)
 {
 	u32 hz, scale, cr;
@@ -135,18 +136,18 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 
 	/* Calculate and program the clock rate */
 	hz = t->speed_hz ? t->speed_hz : device->max_speed_hz;
-	scale = (DIV_ROUND_UP(clk_get_rate(spi->clk) >> 1, hz) - 1) & XSPI_SCD_SCALE_MASK;
-	shakti_spi_write(spi, XSPI_SCDR_OFFSET, scale);
+	scale = (DIV_ROUND_UP(clk_get_rate(spi->clk) >> 1, hz) - 1) & XSPI_SCD_SCALE_MASK; /* Mask has FFF against data in register */
+	shakti_spi_write(spi, XSPI_SCDR_OFFSET, scale); /* Replace XSPI_SCDR_OFFSET with SPI_BR*/
 
 	/* Modify the SPI protocol mode */
-	cr = shakti_spi_read(spi, XSPI_FFR_OFFSET);
+	cr = shakti_spi_read(spi, XSPI_FFR_OFFSET); /* related to frame format use SPI_LSBFIRST*/
 
 	/* LSB first? */
-	cr &= ~XSPI_FF_LSB_FIRST;
+	cr &= ~XSPI_FF_LSB_FIRST; 	//Use SPI_LSBFIRST
 	if (device->mode & SPI_LSB_FIRST)
-		cr |= XSPI_FF_LSB_FIRST;
+		cr |= XSPI_FF_LSB_FIRST; //Use SPI_LSBFIRST
 
-	/* SINGLE/DUAL/QUAD? */
+	/* SINGLE/DUAL/QUAD? */ //check this regarding the number of bits transfer like 1bit transfer or 2 bit transfer or 4 bit transfer
 	mode = max((int)t->rx_nbits, (int)t->tx_nbits);
 	cr &= ~XSPI_FF_SPI_MASK;
 	switch (mode) {
@@ -155,7 +156,7 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 		default:             cr |= XSPI_FF_SINGLE; break;
 	}
 
-	/* SPI direction */
+	/* SPI direction */ // check wrt SHAKTI
 	cr &= ~XSPI_FF_TX_DIR;
 	if (!t->rx_buf)
 		cr |= XSPI_FF_TX_DIR;
@@ -170,18 +171,18 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 	return 1600000 * spi->buffer_size <= hz * mode;
 }
 
-//Need to update this file --- UPDATED
+//Need to update this file --- UPDATED but pending with some registers
 static void shakti_spi_tx(struct shakti_spi *spi, const u8* tx_ptr)
 {
-	BUG_ON((shakti_spi_read(spi, XSPI_TXDR_OFFSET) & XSPI_TXD_FIFO_FULL) != 0);
+	BUG_ON((shakti_spi_read(spi, XSPI_TXDR_OFFSET) & XSPI_TXD_FIFO_FULL) != 0); // check FIFO full and its flag SPI_FTLVL
 	shakti_spi_write(spi, XSPI_TXDR_OFFSET, *tx_ptr & XSPI_DATA_MASK);
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED but pending with some registers
 static void shakti_spi_rx(struct shakti_spi *spi, u8* rx_ptr)
 {
         u32 data = shakti_spi_read(spi, XSPI_RXDR_OFFSET);
-        BUG_ON((data & XSPI_RXD_FIFO_EMPTY) != 0);
+        BUG_ON((data & XSPI_RXD_FIFO_EMPTY) != 0); // check FIFO empty and its flag SPI_FRLVL
         *rx_ptr = data & XSPI_DATA_MASK;
 }
 
@@ -199,7 +200,7 @@ static void shakti_spi_wait(struct shakti_spi *spi, int bit, int poll)
 	}
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED but pending with some registers
 static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, int poll)
 {
 	int remaining_words = t->len;
@@ -231,7 +232,7 @@ static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, i
 	}
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED --- completed FULL
 static int shakti_spi_transfer_one(struct spi_master *master, struct spi_device *device, struct spi_transfer *t)
 {
 	struct shakti_spi *spi = spi_master_get_devdata(master);
@@ -253,7 +254,7 @@ static void shakti_spi_set_cs(struct spi_device *device, bool is_high)
 	if (device->mode & SPI_CS_HIGH)
 		is_high = !is_high;
 
-	shakti_spi_write(spi, XSPI_CSMR_OFFSET, is_high ? XSPI_CSM_MODE_AUTO : XSPI_CSM_MODE_HOLD);	//TODO. understand
+	shakti_spi_write(spi, XSPI_CSMR_OFFSET, is_high ? XSPI_CSM_MODE_AUTO : XSPI_CSM_MODE_HOLD);	//TODO. understand and change
 }
 
 //Need to update the file  --- UPDATED
@@ -283,7 +284,7 @@ static int shakti_spi_probe(struct platform_device *pdev)
 		goto put_master;
 	}
 
-	/*spi->clk = devm_clk_get(&pdev->dev, NULL);
+	spi->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(spi->clk)) {
 		dev_err(&pdev->dev, "Unable to find bus clock\n");
 		ret = PTR_ERR(spi->clk);
@@ -295,12 +296,12 @@ static int shakti_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Unable to find interrupt\n");
 		ret = spi->irq;
 		goto put_master;
-	}*/
+	}
 
 	/* Optional parameters */ ---- TODO Understand
 	ret = of_property_read_u32(pdev->dev.of_node, "shakti,buffer-size", &buffer_size);
 	if (ret < 0)
-		spi->buffer_size = SIFIVE_SPI_DEFAULT_DEPTH;
+		spi->buffer_size = SIFIVE_SPI_DEFAULT_DEPTH;	//TODO. getting buffer depth of Shakti
 	else
 		spi->buffer_size = buffer_size;
 
@@ -309,11 +310,11 @@ static int shakti_spi_probe(struct platform_device *pdev)
 		bits_per_word = SIFIVE_SPI_DEFAULT_BITS;
 
 	/* Spin up the bus clock before hitting registers */
-	/*ret = clk_prepare_enable(spi->clk);
+	ret = clk_prepare_enable(spi->clk);
 	if (ret) {
 		dev_err(&pdev->dev, "Unable to enable bus clock\n");
 		goto put_master;
-	}*/
+	}
 
 	/* probe the number of CS lines */
 	spi->cs_inactive = shakti_spi_read(spi, XSPI_CSDR_OFFSET);	//TODO. understand
@@ -353,12 +354,12 @@ static int shakti_spi_probe(struct platform_device *pdev)
 	shakti_spi_init(spi);
 
 	/* Register for SPI Interrupt */
-	/*ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
+	ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
 				dev_name(&pdev->dev), spi);
 	if (ret) {
 		dev_err(&pdev->dev, "Unable to bind to interrupt\n");
 		goto put_master;
-	}*/
+	}
 
 	dev_info(&pdev->dev, "mapped; irq=%d, cs=%d\n",
 		spi->irq, master->num_chipselect);
@@ -384,7 +385,7 @@ static int shakti_spi_remove(struct platform_device *pdev)
 	struct shakti_spi *spi = spi_master_get_devdata(master);
 
 	/* Disable all the interrupts just in case */
-	//sifive_spi_write(spi, XSPI_IER_OFFSET, 0);
+	shakti_spi_write(spi, XSPI_IER_OFFSET, 0);
 	spi_master_put(master);
 
 	return 0;
@@ -395,7 +396,7 @@ static const struct of_device_id shakti_spi_of_match[] = {
 	{ .compatible = "shakti,spi0", },
 	{}
 };
-MODULE_DEVICE_TABLE(of, sifive_spi_of_match);
+MODULE_DEVICE_TABLE(of, shakti_spi_of_match);
 
 static struct platform_driver sifive_spi_driver = {
 	.probe = shakti_spi_probe,
@@ -408,5 +409,5 @@ static struct platform_driver sifive_spi_driver = {
 module_platform_driver(shakti_spi_driver);
 
 MODULE_AUTHOR("SandLogic Technologies Pvt Ltd");
-MODULE_DESCRIPTION("ShaktiVajra GPIO driver");
+MODULE_DESCRIPTION("ShaktiVajra SPI Linux driver");
 MODULE_LICENSE("GPL");
