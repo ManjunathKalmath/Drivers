@@ -8,6 +8,7 @@
 #include <linux/ioport.h>
 #include <linux/completion.h>
 #include <linux/log2.h>
+#include <linux/mod_devicetable.h>
 
 #define SHAKTI_SPI_NAME "shakti_spi"
 
