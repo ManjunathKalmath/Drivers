@@ -11,6 +11,8 @@
 #include <linux/mod_devicetable.h>
 
 #define SHAKTI_SPI_NAME "shakti_spi"
+#define SIFIVE_SPI_DEFAULT_DEPTH 	8
+#define SIFIVE_SPI_DEFAULT_BITS  	8
 
 #define SPI_CR1	     0x00020000
 #define SPI_CR2	     0x00020004
@@ -25,10 +27,10 @@
 #define SPI_TXCRCR   0x00020028
 
 // defining SPI_CR1 register
-#define SPI_CPHA	      (1 << 0)	//(0 << 0)
-#define SPI_CPOL	      (1 << 1)  //(0 << 1)
+#define SPI_CPHA	      (1 << 0)	
+#define SPI_CPOL	      (1 << 1)  
 #define SPI_MSTR	      (1 << 2)
-#define SPI_BR(x)	      (x << 3)	// ((0 << 3) | (1 << 4) | (0 << 5)) /* fclk/8 will be done here by setting these bits */
+#define SPI_BR(x)	      (x << 3)	
 #define SPI_SPE		      (1 << 6)  
 #define SPI_LSBFIRST	      (1 << 7)
 #define SPI_SSI		      (1 << 8)
@@ -39,8 +41,8 @@
 #define SPI_CRCEN	      (1 << 13)
 #define SPI_BIDIOE	      (1 << 14)
 #define SPI_BIDIMODE	      (1 << 15)
-#define SPI_TOTAL_BITS_TX(x)  (x << 16)	/* It is 8 bit in length so just sending 10 values so ((0 << 16) | (1 << 17) | (0 << 18) | (1 << 19) | (0 << 20) | (0 << 21) | (0 << 22) | (0 << 23))*/
-#define SPI_TOTAL_BITS_RX(x)  (x << 24) /* It is 8 bit in length so need to receive 10 values so ((0 << 24) | (1 << 25) | (0 << 26) | (1 << 27) | (0 << 28) | (0 << 29) | (0 << 30) | (0 << 31))*/
+#define SPI_TOTAL_BITS_TX(x)  (x << 16)	
+#define SPI_TOTAL_BITS_RX(x)  (x << 24) 
 
 // defining SPI_CR2 register
 #define SPI_RX_IMM_START   (1 << 16)
@@ -48,7 +50,7 @@
 #define SPI_LDMA_TX	   (1 << 14)
 #define SPI_LDMA_RX	   (1 << 13)
 #define SPI_FRXTH	   (1 << 12)
-#define SPI_DS(x)	   (x << 8) /* It is 3 bit in length and reserved so ((1 << 8) |(1 << 9) |(1 << 10) | (1 << 11)) */
+#define SPI_DS(x)	   (x << 8) 
 #define SPI_TXEIE	   (1 << 7)
 #define SPI_RXNEIE	   (1 << 6)
 #define SPI_ERRIE	   (1 << 5)
