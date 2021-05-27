@@ -11,8 +11,8 @@
 #include <linux/mod_devicetable.h>
 
 #define SHAKTI_SPI_NAME "shakti_spi"
-#define SIFIVE_SPI_DEFAULT_DEPTH 	8
-#define SIFIVE_SPI_DEFAULT_BITS  	8
+#define SHAKTI_SPI_DEFAULT_DEPTH 	4	//in bytes
+#define SHAKTI_SPI_DEFAULT_BITS  	8
 
 #define SPI_CR1	     0x00020000
 #define SPI_CR2	     0x00020004
@@ -83,7 +83,6 @@ int* spi_crcpr  = (int*) SPI_CRCPR;
 int* spi_rxcrcr = (int*) SPI_RXCRCR;
 int* spi_txcrcr = (int*) SPI_TXCRCR; 
 
-
 struct shakti_spi {
 	void __iomem      *regs;        /* virt. address of control registers */
 	struct clk	  *clk;		/* bus clock */
@@ -103,10 +102,10 @@ static u32 shakti_spi_read(struct shakti_spi *spi, int offset)
 
 static void shakti_spi_init(struct shakti_spi *spi)
 {
-	//If some of the registers requires value to be stored at starting such as 1 into Reg1 and 0 to Reg2 and so on
+	shakti_spi_write(spi, SPI_CR1 , (SPI_BR(7)|SPI_CPHA|SPI_CPOL));	/*setting up Baud Rate and sampling edge */
 }
 
-//Need to update the file --- UPDATED but some pending with registers
+//Update about this fn
  static void shakti_spi_prep_device(struct shakti_spi *spi, struct spi_device *device)
 {
 	u32 cr;
@@ -116,38 +115,38 @@ static void shakti_spi_init(struct shakti_spi *spi)
 		spi->cs_inactive &= ~BIT(device->chip_select);
 	else
 		spi->cs_inactive |= BIT(device->chip_select);
-	shakti_spi_write(spi, /*need to CS offset address*/, spi->cs_inactive);
+	shakti_spi_write(spi, , spi->cs_inactive);
 
 	/* Select the correct device */
 	shakti_spi_write(spi, /*CSDIR*/, device->chip_select);
 
 	/* Switch clock mode bits */
-	cr = shakti_spi_read(spi, XSPI_SCMR_OFFSET) & ~XSPI_SCM_MODE_MASK; /*There are multiple are included so how to take separate CPOL and CPHA*/
+	cr = shakti_spi_read(spi, SPI_CR1) & ~(SPI_CPHA|SPI_CPOL); 
 	if (device->mode & SPI_CPHA)
 		cr |= SPI_CPHA;
 	if (device->mode & SPI_CPOL)
 		cr |= SPI_CPOL;
-	shakti_spi_write(spi, XSPI_SCMR_OFFSET, cr);
+	shakti_spi_write(spi, , cr);
 }
 
-//Need to update the file --- UPDATED but some pending with registers
+
 static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *device, struct spi_transfer *t)
 {
 	u32 hz, scale, cr;
 	int mode;
 
 	/* Calculate and program the clock rate */
-	hz = t->speed_hz ? t->speed_hz : device->max_speed_hz;
+	/*hz = t->speed_hz ? t->speed_hz : device->max_speed_hz;
 	scale = (DIV_ROUND_UP(clk_get_rate(spi->clk) >> 1, hz) - 1) & XSPI_SCD_SCALE_MASK; /* Mask has FFF against data in register */
-	shakti_spi_write(spi, XSPI_SCDR_OFFSET, scale); /* Replace XSPI_SCDR_OFFSET with SPI_BR*/
+	/*shakti_spi_write(spi, XSPI_SCDR_OFFSET, scale);*/ /* Replace XSPI_SCDR_OFFSET with SPI_BR*/
 
 	/* Modify the SPI protocol mode */
-	cr = shakti_spi_read(spi, XSPI_FFR_OFFSET); /* related to frame format use SPI_LSBFIRST*/
+	cr = shakti_spi_read(spi, SPI_LSBFIRST); /* related to frame format - SPI_LSBFIRST*/
 
 	/* LSB first? */
-	cr &= ~XSPI_FF_LSB_FIRST; 	//Use SPI_LSBFIRST
+	cr &= ~SPI_LSBFIRST; 	//Use SPI_LSBFIRST
 	if (device->mode & SPI_LSB_FIRST)
-		cr |= XSPI_FF_LSB_FIRST; //Use SPI_LSBFIRST
+		cr |= SPI_LSBFIRST; //Use SPI_LSBFIRST
 
 	/* SINGLE/DUAL/QUAD? */ //check this regarding the number of bits transfer like 1bit transfer or 2 bit transfer or 4 bit transfer
 	mode = max((int)t->rx_nbits, (int)t->tx_nbits);
@@ -176,19 +175,19 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 //Need to update this file --- UPDATED but pending with some registers
 static void shakti_spi_tx(struct shakti_spi *spi, const u8* tx_ptr)
 {
-	BUG_ON((shakti_spi_read(spi, XSPI_TXDR_OFFSET) & XSPI_TXD_FIFO_FULL) != 0); // check FIFO full and its flag SPI_FTLVL
-	shakti_spi_write(spi, XSPI_TXDR_OFFSET, *tx_ptr & XSPI_DATA_MASK);
+	BUG_ON((shakti_spi_read(spi, SPI_SR) & SPI_FTLVL) != 0); // check FIFO full and its flag SPI_FTLVL
+	shakti_spi_write(spi, SPI_SR, *tx_ptr & XSPI_DATA_MASK); //check with data mask
 }
 
 //Need to update the file --- UPDATED but pending with some registers
 static void shakti_spi_rx(struct shakti_spi *spi, u8* rx_ptr)
 {
-        u32 data = shakti_spi_read(spi, XSPI_RXDR_OFFSET);
-        BUG_ON((data & XSPI_RXD_FIFO_EMPTY) != 0); // check FIFO empty and its flag SPI_FRLVL
-        *rx_ptr = data & XSPI_DATA_MASK;
+        u32 data = shakti_spi_read(spi, SPI_SR);
+        BUG_ON((data & SPI_FRLVL) != 0); // check FIFO empty and its flag SPI_FRLVL
+        *rx_ptr = data & XSPI_DATA_MASK; //check with data mask	
 }
 
-//Need to update the file --- UPDATED --- Interrupt based check
+//Need to update the file --- UPDATED --- Interrupt based check ///check
 static void shakti_spi_wait(struct shakti_spi *spi, int bit, int poll)
 {
 	if (poll) {
@@ -219,7 +218,7 @@ static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, i
 
 		if (rx_ptr) {
 			/* Wait for transmission + reception to complete */
-			shakti_spi_write(spi, XSPI_RXWMR_OFFSET, n_words-1);	//TODO. understand
+			shakti_spi_write(spi, XSPI_RXWMR_OFFSET, n_words-1);	//TODO. understand regrads to interrupt
 			shakti_spi_wait(spi, XSPI_RXWM_INTR, poll);		//TODO. understand
 
 			/* Read out all the data from the RX FIFO */
@@ -234,7 +233,6 @@ static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, i
 	}
 }
 
-//Need to update the file --- UPDATED --- completed FULL
 static int shakti_spi_transfer_one(struct spi_master *master, struct spi_device *device, struct spi_transfer *t)
 {
 	struct shakti_spi *spi = spi_master_get_devdata(master);
@@ -247,7 +245,7 @@ static int shakti_spi_transfer_one(struct spi_master *master, struct spi_device 
 	return 0;
 }
 
-//Need to update the file --- UPDATED
+//Need to update the file --- UPDATED --- not needed
 static void shakti_spi_set_cs(struct spi_device *device, bool is_high)
 {
 	struct shakti_spi *spi = spi_master_get_devdata(device->master);
@@ -259,7 +257,6 @@ static void shakti_spi_set_cs(struct spi_device *device, bool is_high)
 	shakti_spi_write(spi, XSPI_CSMR_OFFSET, is_high ? XSPI_CSM_MODE_AUTO : XSPI_CSM_MODE_HOLD);	//TODO. understand and change
 }
 
-//Need to update the file  --- UPDATED
 static int shakti_spi_probe(struct platform_device *pdev)
 {
 	struct shakti_spi *spi;
@@ -303,13 +300,13 @@ static int shakti_spi_probe(struct platform_device *pdev)
 	/* Optional parameters */ ---- TODO Understand
 	ret = of_property_read_u32(pdev->dev.of_node, "shakti,buffer-size", &buffer_size);
 	if (ret < 0)
-		spi->buffer_size = SIFIVE_SPI_DEFAULT_DEPTH;	//TODO. getting buffer depth of Shakti
+		spi->buffer_size = SHAKTI_SPI_DEFAULT_DEPTH;	//TODO. getting buffer depth of Shakti
 	else
 		spi->buffer_size = buffer_size;
 
 	ret = of_property_read_u32(pdev->dev.of_node, "shakti,bits-per-word", &bits_per_word);
 	if (ret < 0)
-		bits_per_word = SIFIVE_SPI_DEFAULT_BITS;
+		bits_per_word = SHAKTI_SPI_DEFAULT_BITS;
 
 	/* Spin up the bus clock before hitting registers */
 	ret = clk_prepare_enable(spi->clk);
@@ -356,8 +353,8 @@ static int shakti_spi_probe(struct platform_device *pdev)
 	shakti_spi_init(spi);
 
 	/* Register for SPI Interrupt */
-	ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
-				dev_name(&pdev->dev), spi);
+	/*ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
+				dev_name(&pdev->dev), spi);*/
 	if (ret) {
 		dev_err(&pdev->dev, "Unable to bind to interrupt\n");
 		goto put_master;
@@ -380,27 +377,25 @@ put_master:
 	return ret;
 }
 
-//Need to update the file --- UPDATED
 static int shakti_spi_remove(struct platform_device *pdev)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct shakti_spi *spi = spi_master_get_devdata(master);
 
 	/* Disable all the interrupts just in case */
-	shakti_spi_write(spi, XSPI_IER_OFFSET, 0);
+	shakti_spi_write(spi, XSPI_IER_OFFSET, 0);	//Not needed
 	spi_master_put(master);
 
 	return 0;
 }
 
-//Need to update the file --- UPDATED
 static const struct of_device_id shakti_spi_of_match[] = {
 	{ .compatible = "shakti,spi0", },
 	{}
 };
 MODULE_DEVICE_TABLE(of, shakti_spi_of_match);
 
-static struct platform_driver sifive_spi_driver = {
+static struct platform_driver shakti_spi_driver = {
 	.probe = shakti_spi_probe,
 	.remove = shakti_spi_remove,
 	.driver = {
