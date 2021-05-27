@@ -105,31 +105,6 @@ static void shakti_spi_init(struct shakti_spi *spi)
 	shakti_spi_write(spi, SPI_CR1 , (SPI_BR(7)|SPI_CPHA|SPI_CPOL));	/*setting up Baud Rate and sampling edge */
 }
 
-//Update about this fn
- static void shakti_spi_prep_device(struct shakti_spi *spi, struct spi_device *device)
-{
-	u32 cr;
-
-	/* Update the chip select polarity */
-	if (device->mode & SPI_CS_HIGH)
-		spi->cs_inactive &= ~BIT(device->chip_select);
-	else
-		spi->cs_inactive |= BIT(device->chip_select);
-	shakti_spi_write(spi, , spi->cs_inactive);
-
-	/* Select the correct device */
-	shakti_spi_write(spi, /*CSDIR*/, device->chip_select);
-
-	/* Switch clock mode bits */
-	cr = shakti_spi_read(spi, SPI_CR1) & ~(SPI_CPHA|SPI_CPOL); 
-	if (device->mode & SPI_CPHA)
-		cr |= SPI_CPHA;
-	if (device->mode & SPI_CPOL)
-		cr |= SPI_CPOL;
-	shakti_spi_write(spi, , cr);
-}
-
-
 static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *device, struct spi_transfer *t)
 {
 	u32 hz, scale, cr;
@@ -243,18 +218,6 @@ static int shakti_spi_transfer_one(struct spi_master *master, struct spi_device 
 	shakti_spi_execute(spi, t, poll);
 
 	return 0;
-}
-
-//Need to update the file --- UPDATED --- not needed
-static void shakti_spi_set_cs(struct spi_device *device, bool is_high)
-{
-	struct shakti_spi *spi = spi_master_get_devdata(device->master);
-
-	/* Reverse polarity is handled by SCMR/CPOL. Not inverted CS. */
-	if (device->mode & SPI_CS_HIGH)
-		is_high = !is_high;
-
-	shakti_spi_write(spi, XSPI_CSMR_OFFSET, is_high ? XSPI_CSM_MODE_AUTO : XSPI_CSM_MODE_HOLD);	//TODO. understand and change
 }
 
 static int shakti_spi_probe(struct platform_device *pdev)
