@@ -107,13 +107,8 @@ static void shakti_spi_init(struct shakti_spi *spi)
 
 static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *device, struct spi_transfer *t)
 {
-	u32 hz, scale, cr;
+	u32 cr;
 	int mode;
-
-	/* Calculate and program the clock rate */
-	/*hz = t->speed_hz ? t->speed_hz : device->max_speed_hz;
-	scale = (DIV_ROUND_UP(clk_get_rate(spi->clk) >> 1, hz) - 1) & XSPI_SCD_SCALE_MASK; /* Mask has FFF against data in register */
-	/*shakti_spi_write(spi, XSPI_SCDR_OFFSET, scale);*/ /* Replace XSPI_SCDR_OFFSET with SPI_BR*/
 
 	/* Modify the SPI protocol mode */
 	cr = shakti_spi_read(spi, SPI_LSBFIRST); /* related to frame format - SPI_LSBFIRST*/
@@ -122,29 +117,8 @@ static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *d
 	cr &= ~SPI_LSBFIRST; 	//Use SPI_LSBFIRST
 	if (device->mode & SPI_LSB_FIRST)
 		cr |= SPI_LSBFIRST; //Use SPI_LSBFIRST
-
-	/* SINGLE/DUAL/QUAD? */ //check this regarding the number of bits transfer like 1bit transfer or 2 bit transfer or 4 bit transfer
-	mode = max((int)t->rx_nbits, (int)t->tx_nbits);
-	cr &= ~XSPI_FF_SPI_MASK;
-	switch (mode) {
-		case SPI_NBITS_QUAD: cr |= XSPI_FF_QUAD;   break;
-		case SPI_NBITS_DUAL: cr |= XSPI_FF_DUAL;   break;
-		default:             cr |= XSPI_FF_SINGLE; break;
-	}
-
-	/* SPI direction */ // check wrt SHAKTI
-	cr &= ~XSPI_FF_TX_DIR;
-	if (!t->rx_buf)
-		cr |= XSPI_FF_TX_DIR;
-
-	shakti_spi_write(spi, XSPI_FFR_OFFSET, cr);
-
-	/* We will want to poll if the time we need to wait is less than the context switching time.
-	 * Let's call that threshold 5us. The operation will take:
-	 *    (8/mode) * buffer_size / hz <= 5 * 10^-6
-	 *    1600000 * buffer_size <= hz * mode
-	 */
-	return 1600000 * spi->buffer_size <= hz * mode;
+	
+//check for return value and fn using it
 }
 
 //Need to update this file --- UPDATED but pending with some registers
