@@ -270,7 +270,7 @@ static int shakti_spi_probe(struct platform_device *pdev)
 		goto put_master;
 	}
 
-	/* Define our master */
+	/* Define our master - chenge wrt SHAKTI */
 	master->bus_num = pdev->id;
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST | SPI_CS_HIGH |
 	                    SPI_TX_DUAL | SPI_TX_QUAD | SPI_RX_DUAL | SPI_RX_QUAD;
@@ -281,21 +281,8 @@ static int shakti_spi_probe(struct platform_device *pdev)
 	master->transfer_one = shakti_spi_transfer_one;
 	master->set_cs = shakti_spi_set_cs;
 
-	/* If mmc_spi sees a dma_mask, it starts using dma mapped buffers.
-	 * Probably it should rely on the SPI core auto mapping instead.
-	 */
-	//pdev->dev.dma_mask = 0;
-
 	/* Configure the SPI master hardware */
 	shakti_spi_init(spi);
-
-	/* Register for SPI Interrupt */
-	/*ret = devm_request_irq(&pdev->dev, spi->irq, sifive_spi_irq, 0,
-				dev_name(&pdev->dev), spi);*/
-	if (ret) {
-		dev_err(&pdev->dev, "Unable to bind to interrupt\n");
-		goto put_master;
-	}
 
 	dev_info(&pdev->dev, "mapped; irq=%d, cs=%d\n",
 		spi->irq, master->num_chipselect);
