@@ -1,6 +1,5 @@
 #include <linux/clk.h>
 #include <linux/module.h>
-#include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
@@ -11,8 +10,6 @@
 #include <linux/mod_devicetable.h>
 
 #define SHAKTI_SPI_NAME "shakti_spi"
-#define SHAKTI_SPI_DEFAULT_DEPTH 	4	//in bytes
-#define SHAKTI_SPI_DEFAULT_BITS  	8
 
 #define SPI_CR1	     0x00020000
 #define SPI_CR2	     0x00020004
@@ -70,19 +67,6 @@
 #define TXE		(1 << 1)
 #define RXNE		(1 << 0)
 
-//pointers to register
-int* spi_cr1    = (int*) SPI_CR1;
-int* spi_cr2    = (int*) SPI_CR2;
-int* spi_sr     = (int*) SPI_SR ;
-int* spi_dr1    = (int*) SPI_DR1 ;
-int* spi_dr2    = (int*) SPI_DR2 ;
-int* spi_dr3    = (int*) SPI_DR3 ;
-int* spi_dr4    = (int*) SPI_DR4 ;
-int* spi_dr5    = (int*) SPI_DR5 ;
-int* spi_crcpr  = (int*) SPI_CRCPR;
-int* spi_rxcrcr = (int*) SPI_RXCRCR;
-int* spi_txcrcr = (int*) SPI_TXCRCR; 
-
 struct shakti_spi {
 	void __iomem      *regs;        /* virt. address of control registers */
 	struct clk	  *clk;		/* bus clock */
@@ -102,96 +86,47 @@ static u32 shakti_spi_read(struct shakti_spi *spi, int offset)
 
 static void shakti_spi_init(struct shakti_spi *spi)
 {
-	shakti_spi_write(spi, SPI_CR1 , (SPI_BR(7)|SPI_CPHA|SPI_CPOL));	/*setting up Baud Rate and sampling edge */
+	shakti_spi_write(spi, SPI_CR1 , (SPI_LSBFIRST|SPI_BIDIMODE|SPI_BR(7)|SPI_MSTR|SPI_CPOL|SPI_CPHA));	/*setting up Baud Rate and sampling edge */
 }
 
-static int shakti_spi_prep_transfer(struct shakti_spi *spi, struct spi_device *device, struct spi_transfer *t)
-{
-	u32 cr;
-	int mode;
+void SPI_SendData(struct shakti_spi *spi, u32 *pTxBuffer, u32 Len){
 
-	/* Modify the SPI protocol mode */
-	cr = shakti_spi_read(spi, SPI_LSBFIRST); /* related to frame format - SPI_LSBFIRST*/
+    while(Len > 0){
 
-	/* LSB first? */
-	cr &= ~SPI_LSBFIRST; 	//Use SPI_LSBFIRST
-	if (device->mode & SPI_LSB_FIRST)
-		cr |= SPI_LSBFIRST; //Use SPI_LSBFIRST
-	
-//check for return value and fn using it
+    //1. wait untill SPI_TXE is set ==> means TX Buffer has sent all data
+    while(!(SPI_SR & (1 << 1) ));
+
+    //2. check the LSBFIRST bit in CR1
+    if( (SPI_CR1 & (1 << 7)) ){
+        //32 BIT DFF
+        //1. Load the Data into the DR Register
+        SPI_DR1 = *pTxBuffer;
+	SPI_DR5 = 0x00000000;	//writing Dummy Value
+	shakti_spi_write(spi, SPI_CR1 , (SPI_TOTAL_BITS_TX(32)|SPI_TOTAL_BITS_RX(0)|SPI_SPE|SPI_LSBFIRST|SPI_BIDIMODE|SPI_BR(7)|SPI_MSTR|SPI_CPOL|SPI_CPHA));  
+    }    
+        Len --;
+        pTxBuffer++; 
+  }
+
 }
 
-//Need to update this file --- UPDATED but pending with some registers
-static void shakti_spi_tx(struct shakti_spi *spi, const u8* tx_ptr)
-{
-	BUG_ON((shakti_spi_read(spi, SPI_SR) & SPI_FTLVL) != 0); // check FIFO full and its flag SPI_FTLVL
-	shakti_spi_write(spi, SPI_SR, *tx_ptr & XSPI_DATA_MASK); //check with data mask
-}
+void SPI_ReceiveData(struct shakti_spi *spi, u32 *pRxBuffer, u32 Len){
+     while(Len > 0){
 
-//Need to update the file --- UPDATED but pending with some registers
-static void shakti_spi_rx(struct shakti_spi *spi, u8* rx_ptr)
-{
-        u32 data = shakti_spi_read(spi, SPI_SR);
-        BUG_ON((data & SPI_FRLVL) != 0); // check FIFO empty and its flag SPI_FRLVL
-        *rx_ptr = data & XSPI_DATA_MASK; //check with data mask	
-}
+    //1. wait untill SPI_RXNE is set ==> means RX Buffer finish data transfer to Register
+    while(!(SPI_SR & (1 << 0) ));
 
-//Need to update the file --- UPDATED --- Interrupt based check ///check
-static void shakti_spi_wait(struct shakti_spi *spi, int bit, int poll)
-{
-	if (poll) {
-		u32 cr;
-		do cr = shakti_spi_read(spi, XSPI_IPR_OFFSET);		//TODO. understand
-		while (!(cr & bit));
-	} else {
-		reinit_completion(&spi->done);
-		shakti_spi_write(spi, XSPI_IER_OFFSET, bit);
-		wait_for_completion(&spi->done);
-	}
-}
+    //2. check the LSBFIRST bit in CR1
+    if( (SPI_CR1 & (1 << 7))){
+        //32 BIT DFF
+        //1. Load the Data from DR Register to RX Buffer
+        *pRxBuffer = SPI_DR5;
+	 shakti_spi_write(spi, SPI_CR1 , (SPI_TOTAL_BITS_TX(0)|SPI_TOTAL_BITS_RX(32)|SPI_SPE|SPI_LSBFIRST|SPI_BIDIMODE|SPI_BR(7)|SPI_CPOL|SPI_CPHA));
+    }
+	Len --;
+        pRxBuffer++;
 
-//Need to update the file --- UPDATED but pending with some registers
-static void shakti_spi_execute(struct shakti_spi *spi, struct spi_transfer *t, int poll)
-{
-	int remaining_words = t->len;
-	const u8* tx_ptr = t->tx_buf;
-	u8* rx_ptr = t->rx_buf;
-
-	while (remaining_words) {
-		int n_words, tx_words, rx_words;
-		n_words = min(remaining_words, spi->buffer_size);
-
-		/* Enqueue n_words for transmission */
-		for (tx_words = 0; tx_words < n_words; ++tx_words)
-			shakti_spi_tx(spi, tx_ptr++);
-
-		if (rx_ptr) {
-			/* Wait for transmission + reception to complete */
-			shakti_spi_write(spi, XSPI_RXWMR_OFFSET, n_words-1);	//TODO. understand regrads to interrupt
-			shakti_spi_wait(spi, XSPI_RXWM_INTR, poll);		//TODO. understand
-
-			/* Read out all the data from the RX FIFO */
-			for (rx_words = 0; rx_words < n_words; ++rx_words)
-				shakti_spi_rx(spi, rx_ptr++);
-		} else {
-			/* Wait for transmission to complete */
-			shakti_spi_wait(spi, XSPI_TXWM_INTR, poll);
-		}
-
-		remaining_words -= n_words;
-	}
-}
-
-static int shakti_spi_transfer_one(struct spi_master *master, struct spi_device *device, struct spi_transfer *t)
-{
-	struct shakti_spi *spi = spi_master_get_devdata(master);
-	int poll;
-
-	shakti_spi_prep_device(spi, device);
-	poll = shakti_spi_prep_transfer(spi, device, t);
-	shakti_spi_execute(spi, t, poll);
-
-	return 0;
+  }
 }
 
 static int shakti_spi_probe(struct platform_device *pdev)
